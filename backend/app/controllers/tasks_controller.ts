@@ -187,6 +187,12 @@ export default class TasksController {
    * vista es un caso corriente, y para la segunda, que llega cuando la primera
    * ya la ha borrado, la respuesta es un 404 y no un 204 que dé por hecha una
    * acción que no ha ocurrido.
+   *
+   * Eso vale para peticiones que llegan una detrás de otra. Si se cruzan de
+   * verdad entre `findOrFail` y `delete()` no hay garantía: `delete()` no
+   * comprueba cuántas filas borra y las dos podrían responder 204. Con el
+   * driver síncrono de SQLite no debería haber hueco entre las dos líneas,
+   * pero no se ha probado.
    */
   @ApiOperation({
     summary: 'Borrar una tarea',

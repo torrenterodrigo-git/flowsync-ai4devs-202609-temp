@@ -48,6 +48,7 @@ C4Container
   | GET | `/api/v1/tasks` | `TasksController.index` | sí |
   | POST | `/api/v1/tasks` | `TasksController.store` | sí |
   | GET | `/api/v1/tasks/:id` | `TasksController.show` | sí |
+  | DELETE | `/api/v1/tasks/:id` | `TasksController.destroy` | sí |
   | PATCH | `/api/v1/tasks/:id/status` | `TaskStatusesController.update` | sí |
   | PUT | `/api/v1/tasks/:id/due-date` | `TaskDueDatesController.update` | sí |
 

@@ -173,4 +173,37 @@ export default class TasksController {
     response.status(201)
     return serialize(TaskTransformer.transform(task))
   }
+
+  /**
+   * Borrar es definitivo: no hay papelera ni histórico, la fila desaparece. Y
+   * vale para cualquier tarea, sea o no de quien la borra, porque los roles son
+   * planos. La confirmación que compensa todo eso es cosa de la interfaz; aquí
+   * ya se llega con la decisión tomada.
+   */
+  @ApiOperation({
+    summary: 'Borrar una tarea',
+    description:
+      'Borra la tarea de forma definitiva: no hay papelera ni forma de recuperarla. Cualquier cuenta con sesión puede borrar cualquier tarea, sea o no la responsable. La API no pide confirmación.',
+  })
+  @ApiResponse({
+    status: 204,
+    description: 'La tarea ya no existe. La respuesta no lleva cuerpo.',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Falta el token o no es válido. No se borra nada.',
+    type: () => ErrorResponse,
+  })
+  @ApiResponse({
+    status: 404,
+    description:
+      'No existe ninguna tarea con ese identificador, también si otra persona ya la ha borrado.',
+    type: () => ErrorResponse,
+  })
+  async destroy({ params, response }: HttpContext) {
+    const task = await Task.findOrFail(params.id)
+    await task.delete()
+
+    return response.noContent()
+  }
 }

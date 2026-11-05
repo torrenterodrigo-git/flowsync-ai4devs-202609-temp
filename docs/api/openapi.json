@@ -580,6 +580,56 @@
             "bearer": []
           }
         ]
+      },
+      "delete": {
+        "summary": "Borrar una tarea",
+        "description": "Borra la tarea de forma definitiva: no hay papelera ni forma de recuperarla, y desaparece para todo el equipo. Cualquier cuenta con sesión puede borrar cualquier tarea, sea o no la responsable. La API no pide confirmación: borra en cuanto recibe la petición, así que avisar de que no hay vuelta atrás es cosa de quien la llama. Responde sin cuerpo.",
+        "tags": [
+          "Tasks"
+        ],
+        "responses": {
+          "204": {
+            "description": "La tarea ya no existe. La respuesta no lleva cuerpo.",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "401": {
+            "description": "Falta el token o no es válido. No se borra nada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe ninguna tarea con ese identificador: o nunca existió, o alguien la acaba de borrar. No se borra nada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
       }
     },
     "/api/v1/tasks/{id}/status": {

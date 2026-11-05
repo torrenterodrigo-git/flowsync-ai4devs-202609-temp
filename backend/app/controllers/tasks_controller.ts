@@ -173,4 +173,45 @@ export default class TasksController {
     response.status(201)
     return serialize(TaskTransformer.transform(task))
   }
+
+  /**
+   * Borrar es lo único irreversible que se hace con una tarea: no hay papelera
+   * ni histórico, y desaparece para todo el equipo. Como con el estado, cualquier
+   * persona con sesión puede borrar cualquier tarea, propia o ajena; no se
+   * comprueba quién es el responsable.
+   *
+   * Un 204 no lleva cuerpo, así que esta respuesta no pasa por `serialize()`:
+   * lo envolvería en `{ data: ... }`, y eso ya es un cuerpo.
+   *
+   * La tarea se busca antes de borrarla. Dos personas con la misma tarea a la
+   * vista es un caso corriente, y para la segunda, que llega cuando la primera
+   * ya la ha borrado, la respuesta es un 404 y no un 204 que dé por hecha una
+   * acción que no ha ocurrido.
+   */
+  @ApiOperation({
+    summary: 'Borrar una tarea',
+    description:
+      'Borra la tarea de forma definitiva: no hay papelera ni forma de recuperarla, y desaparece para todo el equipo. Cualquier cuenta con sesión puede borrar cualquier tarea, sea o no la responsable. La API no pide confirmación: borra en cuanto recibe la petición, así que avisar de que no hay vuelta atrás es cosa de quien la llama. Responde sin cuerpo.',
+  })
+  @ApiResponse({
+    status: 204,
+    description: 'La tarea ya no existe. La respuesta no lleva cuerpo.',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Falta el token o no es válido. No se borra nada.',
+    type: () => ErrorResponse,
+  })
+  @ApiResponse({
+    status: 404,
+    description:
+      'No existe ninguna tarea con ese identificador: o nunca existió, o alguien la acaba de borrar. No se borra nada.',
+    type: () => ErrorResponse,
+  })
+  async destroy({ params, response }: HttpContext) {
+    const task = await Task.findOrFail(params.id)
+    await task.delete()
+
+    return response.noContent()
+  }
 }

@@ -130,4 +130,26 @@ test.group('Tasks | borrar', (group) => {
 
     respuesta.assertStatus(404)
   })
+
+  /**
+   * SQLite convierte a número el texto que se compara con una columna entera,
+   * así que sin filtrar en la ruta estas URLs casarían con la tarea. Borrar es
+   * irreversible: solo vale el identificador tal y como lo devuelve la API.
+   */
+  test('un identificador que solo se parece al de una tarea responde 404 y no la borra', async ({
+    client,
+    assert,
+  }) => {
+    const token = await cuentaConToken(client, 'ada@example.com')
+    const id = await tareaDe(client, token)
+
+    for (const parecido of [`${id}.0`, `${id}e0`, `+${id}`, `%20${id}`, `0${id}`]) {
+      const respuesta = await client
+        .delete(`/api/v1/tasks/${parecido}`)
+        .header('Authorization', `Bearer ${token}`)
+
+      assert.equal(respuesta.status(), 404, parecido)
+      assert.isNotNull(await Task.find(id), parecido)
+    }
+  })
 })

@@ -51,7 +51,9 @@ router
         router.get('/', [controllers.Tasks, 'index'])
         router.post('/', [controllers.Tasks, 'store'])
         router.get(':id', [controllers.Tasks, 'show'])
-        router.delete(':id', [controllers.Tasks, 'destroy'])
+        // Solo el identificador exacto: SQLite haría casar `1.0` o `+1` con la
+        // tarea 1, y borrar no tiene vuelta atrás.
+        router.delete(':id', [controllers.Tasks, 'destroy']).where('id', /^[1-9][0-9]*$/)
         router.patch(':id/status', [controllers.TaskStatuses, 'update'])
         router.put(':id/due-date', [controllers.TaskDueDates, 'update'])
       })

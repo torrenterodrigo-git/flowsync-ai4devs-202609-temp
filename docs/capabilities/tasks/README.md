@@ -26,9 +26,10 @@ de `POST /api/v1/auth/login` o de `POST /api/v1/auth/signup`.
 | `PATCH /tasks/:id/status` | `{ "status": "pending \| in_progress \| done" }` | [`TaskStatusesController.update`](../../../backend/app/controllers/task_statuses_controller.ts) | `200` · la tarea ya cambiada |
 | `PUT /tasks/:id/due-date` | `{ "dueDate": "AAAA-MM-DD" \| null, "today": "AAAA-MM-DD" }` | [`TaskDueDatesController.update`](../../../backend/app/controllers/task_due_dates_controller.ts) | `200` · la tarea con vencimiento |
 
-Toda respuesta con cuerpo va envuelta en `{ "data": ... }` por el serializer de
-[`providers/api_provider.ts`](../../../backend/providers/api_provider.ts). La única sin cuerpo es el
-`204` de `DELETE /tasks/:id`, que no pasa por `serialize()`: envolverlo ya sería darle uno.
+Toda respuesta correcta con cuerpo va envuelta en `{ "data": ... }` por el serializer de
+[`providers/api_provider.ts`](../../../backend/providers/api_provider.ts). La única correcta sin
+cuerpo es el `204` de `DELETE /tasks/:id`, que no pasa por `serialize()`: envolverlo ya sería darle
+uno. Los errores (`401`, `404`, `422`) salen con su propio cuerpo, sin `data`.
 
 ### Dos formas de tarea, no una
 
@@ -74,7 +75,11 @@ transformers: así el documento **no puede** enseñar el vencimiento en la lista
 
 Ese fichero es documentación, no validación: describe lo que los controladores ya hacen. Si cambia un
 transformer o un validador, se actualiza en el mismo commit. El documento se construye en cada
-petición y no hay fichero que generar; lo que se commitea es el diff de `.adonisjs/`.
+petición (`/api.json`), pero también se versiona en
+[`docs/api/openapi.json`](../../api/openapi.json): se regenera con `npm run openapi:generate`, desde
+`backend/`, y `npm run openapi:check` —el mismo que corre en CI— falla si se ha quedado atrás. En el
+mismo commit va también el diff de `.adonisjs/`, cuyo registro de rutas escribe el servidor de
+desarrollo (`npm run dev`) y no `node ace test`.
 
 ## Reglas de negocio: dónde vive cada una
 
@@ -91,7 +96,7 @@ qué exige cada una, se abre el enlace de la derecha.
 | Qué se ve del responsable | `TaskAssigneeTransformer` | [Lo que cada tarea muestra de su responsable](../../../openspec/specs/tasks/spec.md#requirement-lo-que-cada-tarea-muestra-de-su-responsable) |
 | Los tres estados | `TASK_STATUSES` · `models/task.ts`, y `updateTaskStatusValidator` con `vine.enum` | [Tres estados fijos](../../../openspec/specs/tasks/spec.md#requirement-tres-estados-fijos) |
 | Cambiar de estado, sin permisos por responsable | `TaskStatusesController.update` | [Cambio de estado de cualquier tarea](../../../openspec/specs/tasks/spec.md#requirement-cambio-de-estado-de-cualquier-tarea) |
-| Borrar cualquier tarea, sin permisos por responsable | `TasksController.destroy` · la sesión la exige el grupo, como al resto | **Sin requisito en la spec.** Lo manda [RF-12 del PRD](../../prd/flowsync-mvp.md) y la historia [E2-10](../../backlog/E2-gestion-tareas/us-borrar-tarea.md); el [ADR 0001](../../adr/0001-openspec-como-fuente-de-verdad.md) ya anota que «borrar una tarea» no tiene ninguno. La confirmación explícita que pide RF-12 es de interfaz y hoy no existe |
+| Borrar cualquier tarea, sin permisos por responsable | `TasksController.destroy` · la sesión la exige el grupo, como al resto | **Sin requisito en la spec.** Lo manda [RF-12 del PRD](../../prd/flowsync-mvp.md) y la historia [E2-10](../../backlog/E2-gestion-tareas/us-borrar-tarea.md); el [ADR 0001](../../adr/0001-openspec-como-fuente-de-verdad.md) ya anota que «borrar una tarea» no tiene ninguno. La confirmación explícita que pide RF-12 es de interfaz y hoy no existe, y con el registro abierto cualquier cuenta nueva puede borrar todas las tareas (PA-10 del [PRD](../../prd/flowsync-mvp.md)) |
 | Sesión obligatoria | `.use(middleware.auth())` sobre el grupo · `start/routes.ts` | [Las tareas exigen sesión](../../../openspec/specs/tasks/spec.md#requirement-las-tareas-exigen-sesión) |
 | Fecha de vencimiento opcional | Columna `due_date` nulable · [`database/migrations/`](../../../backend/database/migrations/) | [Fecha de vencimiento opcional](../../../openspec/specs/tasks/spec.md#requirement-fecha-de-vencimiento-opcional) |
 | Poner, cambiar y quitar la fecha | `setTaskDueDateValidator` (con `dueDate` nulable) y `TaskDueDatesController.update` | [Fijar, cambiar y retirar la fecha de vencimiento](../../../openspec/specs/tasks/spec.md#requirement-fijar-cambiar-y-retirar-la-fecha-de-vencimiento) |
@@ -131,7 +136,7 @@ node ace test --tests="el responsable llega con su nombre y sus iniciales"
 Los tests de esta capability están en
 [`backend/tests/functional/tasks/`](../../../backend/tests/functional/tasks/). **Hoy hay dos**:
 `assignee.spec.ts`, que cubre 3 de los 124 scenarios de la spec —los del requisito *Lo que cada tarea
-muestra de su responsable*—, y `delete.spec.ts`, que prueba el borrado con 7 tests y **ninguno** de los
+muestra de su responsable*—, y `delete.spec.ts`, que prueba el borrado con 8 tests y **ninguno** de los
 124 scenarios, porque la spec no tiene requisito de borrado: su cabecera cita RF-12 y la historia
 E2-10 en lugar de un requisito. Todo lo demás está sin cubrir, así que el verde de la suite **no** es
 señal de que la capability cumpla su spec.

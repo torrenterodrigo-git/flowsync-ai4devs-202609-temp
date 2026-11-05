@@ -1,4 +1,4 @@
-import Task from '#models/task'
+import Task, { TASK_STATUSES } from '#models/task'
 import User from '#models/user'
 import { test } from '@japa/runner'
 import type { ApiClient } from '@japa/api-client'
@@ -16,6 +16,12 @@ import testUtils from '@adonisjs/core/services/test_utils'
  *
  * Esto cubre solo el endpoint. La confirmación explícita que pide RF-12
  * (CA-4 a CA-7) es de interfaz y no está en este test ni en este cambio.
+ *
+ * La suite pega contra el mismo SQLite que el servidor de desarrollo, y la
+ * transacción global aísla lo que estos tests escriben, no lo que ya hubiera.
+ * Por eso las cuentas llevan emails propios de este fichero (el recorrido
+ * manual del README de la capability registra `ada@example.com`) y ninguna
+ * comprobación supone que no haya otras filas en la tabla.
  */
 test.group('Tasks | borrar', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
@@ -50,7 +56,7 @@ test.group('Tasks | borrar', (group) => {
     client,
     assert,
   }) => {
-    const { user, token } = await cuenta(client, 'ada@example.com')
+    const { user, token } = await cuenta(client, 'ada.borrar@example.com')
     const tarea = await tareaDe(user)
 
     const respuesta = await client
@@ -69,8 +75,8 @@ test.group('Tasks | borrar', (group) => {
     client,
     assert,
   }) => {
-    const ada = await cuenta(client, 'ada@example.com')
-    const grace = await cuenta(client, 'grace@example.com')
+    const ada = await cuenta(client, 'ada.borrar@example.com')
+    const grace = await cuenta(client, 'grace.borrar@example.com')
     const tarea = await tareaDe(ada.user)
 
     // Antes de borrar, la otra persona la ve. Sin esta comprobación el test
@@ -84,14 +90,22 @@ test.group('Tasks | borrar', (group) => {
 
     assert.notInclude(await idsEnLaLista(client, grace.token), tarea.id)
     assert.notInclude(await idsEnLaLista(client, ada.token), tarea.id)
+
+    // Y abrirla, que es lo que haría quien la tuviera a la vista, ya no la
+    // encuentra: no queda ninguna forma de llegar a ella.
+    const abierta = await client
+      .get(`/api/v1/tasks/${tarea.id}`)
+      .qs({ today: '2026-08-20' })
+      .header('Authorization', `Bearer ${grace.token}`)
+    abierta.assertStatus(404)
   })
 
   test('se puede borrar una tarea que lleva otra persona, sin ningún permiso especial', async ({
     client,
     assert,
   }) => {
-    const ada = await cuenta(client, 'ada@example.com')
-    const grace = await cuenta(client, 'grace@example.com')
+    const ada = await cuenta(client, 'ada.borrar@example.com')
+    const grace = await cuenta(client, 'grace.borrar@example.com')
     const deAda = await tareaDe(ada.user)
 
     const respuesta = await client
@@ -103,31 +117,63 @@ test.group('Tasks | borrar', (group) => {
   })
 
   test('borrar una tarea no toca las demás', async ({ client, assert }) => {
-    const { user, token } = await cuenta(client, 'ada@example.com')
+    const { user, token } = await cuenta(client, 'ada.borrar@example.com')
     const borrada = await tareaDe(user, 'La que se borra')
     const primera = await tareaDe(user, 'Se queda la primera')
     const segunda = await tareaDe(user, 'Se queda la segunda')
+
+    // La BD de desarrollo puede tener ya otras tareas: se cuentan todas antes y
+    // después, en vez de suponer que estas tres son las únicas.
+    const todasAntes = await Task.all()
 
     const respuesta = await client
       .delete(`/api/v1/tasks/${borrada.id}`)
       .header('Authorization', `Bearer ${token}`)
     respuesta.assertStatus(204)
 
-    // El juego de ids exacto y no solo «la borrada ya no está»: un borrado sin
-    // `where` también cumpliría eso.
-    const quedan = await Task.all()
-    const porId = (a: number, b: number) => a - b
-    assert.deepEqual(
-      quedan.map((tarea) => tarea.id).sort(porId),
-      [primera.id, segunda.id].sort(porId)
-    )
+    // Exactamente una menos, y las otras dos en su sitio y sin tocar: un borrado
+    // sin `where` dejaría el recuento a cero, y uno que se llevase de más se
+    // notaría aquí y no solo en que «la borrada ya no está».
+    const todasDespues = await Task.all()
+    assert.equal(todasDespues.length, todasAntes.length - 1)
+    assert.isNull(await Task.find(borrada.id))
 
     const intacta = await Task.findOrFail(primera.id)
     assert.equal(intacta.title, 'Se queda la primera')
+    assert.isNotNull(await Task.find(segunda.id))
+  })
+
+  test('se puede borrar una tarea en cualquier estado, con o sin fecha de vencimiento', async ({
+    client,
+    assert,
+  }) => {
+    const { user, token } = await cuenta(client, 'ada.borrar@example.com')
+
+    // Las hechas son justo las que la lista por defecto esconde, y una con fecha
+    // es la que trae su vencimiento al abrirla: un borrado que mirase el estado
+    // o la fecha pasaría todos los demás tests, que usan siempre una pendiente
+    // y sin fecha.
+    for (const status of TASK_STATUSES) {
+      for (const dueDate of [null, '2026-08-19']) {
+        const tarea = await Task.create({
+          title: 'Para borrar',
+          status,
+          dueDate,
+          assigneeId: user.id,
+        })
+
+        const respuesta = await client
+          .delete(`/api/v1/tasks/${tarea.id}`)
+          .header('Authorization', `Bearer ${token}`)
+
+        respuesta.assertStatus(204)
+        assert.isNull(await Task.find(tarea.id), `${status}, vencimiento ${dueDate}`)
+      }
+    }
   })
 
   test('sin sesión responde 401 y la tarea sigue donde estaba', async ({ client, assert }) => {
-    const { user } = await cuenta(client, 'ada@example.com')
+    const { user } = await cuenta(client, 'ada.borrar@example.com')
     const tarea = await tareaDe(user)
 
     const sinCabecera = await client.delete(`/api/v1/tasks/${tarea.id}`)
@@ -144,8 +190,8 @@ test.group('Tasks | borrar', (group) => {
   test('borrar dos veces la misma tarea: la segunda responde 404, no un fallo del sistema', async ({
     client,
   }) => {
-    const ada = await cuenta(client, 'ada@example.com')
-    const grace = await cuenta(client, 'grace@example.com')
+    const ada = await cuenta(client, 'ada.borrar@example.com')
+    const grace = await cuenta(client, 'grace.borrar@example.com')
     const tarea = await tareaDe(ada.user)
 
     // Es el caso corriente de dos personas con la misma tarea a la vista: una
@@ -168,7 +214,7 @@ test.group('Tasks | borrar', (group) => {
     client,
     assert,
   }) => {
-    const { user, token } = await cuenta(client, 'ada@example.com')
+    const { user, token } = await cuenta(client, 'ada.borrar@example.com')
     const tarea = await tareaDe(user)
 
     // Un número que no existe, algo que no es un número y un intento de colar
